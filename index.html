@@ -21,7 +21,8 @@ main{max-width:480px;margin:0 auto;padding:12px;display:flex;flex-direction:colu
 .cal-nav button{width:36px;height:36px;border-radius:50%;background:#f1f5f9;font-size:20px;color:#475569;display:flex;align-items:center;justify-content:center}
 .dow-row{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px}
 .dow-row div{text-align:center;font-size:11px;font-weight:700;color:#94a3b8;padding:4px 0}
-.dow-row .sun{color:#ef4444}.dow-row .sat{color:#3b82f6}
+.dow-row .sun{color:#ef4444}
+.dow-row .sat{color:#3b82f6}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
 .cal-day{aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:#334155;background:none;padding:0}
 .cal-day.today{background:#dbeafe;color:#1d4ed8;font-weight:700}
@@ -88,7 +89,7 @@ main{max-width:480px;margin:0 auto;padding:12px;display:flex;flex-direction:colu
 <script>
 var NOW=new Date();
 var state={events:[],year:NOW.getFullYear(),month:NOW.getMonth(),selDay:null,listening:false,notifPerm:('Notification' in window)?Notification.permission:'denied'};
-try{var s=localStorage.getItem('sched_v3');if(s)state.events=JSON.parse(s);}catch(e){}
+try{var sv=localStorage.getItem('sched_v3');if(sv)state.events=JSON.parse(sv);}catch(e){}
 function save(){try{localStorage.setItem('sched_v3',JSON.stringify(state.events));}catch(e){}}
 var toastTimer;
 function showToast(msg){var el=document.getElementById('toast');el.textContent=msg;el.className='toast show';clearTimeout(toastTimer);toastTimer=setTimeout(function(){el.className='toast';},2600);}
@@ -98,53 +99,99 @@ function dow(s){return['일','월','화','수','목','금','토'][new Date(s).ge
 function todayStr(){return NOW.getFullYear()+'-'+String(NOW.getMonth()+1).padStart(2,'0')+'-'+String(NOW.getDate()).padStart(2,'0');}
 function parseInput(raw){
   var text=raw.trim(),now=new Date();
-  var date=new Date(now.getFullYear(),now.getMonth(),now.getDate()),dateMatched=false;
+  var date=new Date(now.getFullYear(),now.getMonth(),now.getDate()),dm=false;
   var dayMap={'일':0,'월':1,'화':2,'수':3,'목':4,'금':5,'토':6};
-  if(/오늘/.test(text))dateMatched=true;
-  else if(/내일|낼/.test(text)){date.setDate(date.getDate()+1);dateMatched=true;}
-  else if(/모레/.test(text)){date.setDate(date.getDate()+2);dateMatched=true;}
-  else if(/글피/.test(text)){date.setDate(date.getDate()+3);dateMatched=true;}
+  if(/오늘/.test(text))dm=true;
+  else if(/내일|낼/.test(text)){date.setDate(date.getDate()+1);dm=true;}
+  else if(/모레/.test(text)){date.setDate(date.getDate()+2);dm=true;}
+  else if(/글피/.test(text)){date.setDate(date.getDate()+3);dm=true;}
   var wd=text.match(/(다음주|담주|이번주|이번\s?주|다음\s?주)?\s*([일월화수목금토])요일/);
-  if(wd&&!dateMatched){var t=dayMap[wd[2]],isNext=/다음|담/.test(wd[1]||''),diff=(t-now.getDay()+7)%7;if(isNext)diff+=7;date=new Date(now.getFullYear(),now.getMonth(),now.getDate()+diff);dateMatched=true;}
-  if(!dateMatched){var md=text.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/),dOnly=text.match(/(\d{1,2})\s*일/);
+  if(wd&&!dm){var td=dayMap[wd[2]],nx=/다음|담/.test(wd[1]||''),df=(td-now.getDay()+7)%7;if(nx)df+=7;date=new Date(now.getFullYear(),now.getMonth(),now.getDate()+df);dm=true;}
+  if(!dm){
+    var md=text.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/),dO=text.match(/(\d{1,2})\s*일/);
     if(md){date=new Date(now.getFullYear(),parseInt(md[1])-1,parseInt(md[2]));if(date<new Date(now.getFullYear(),now.getMonth(),now.getDate()))date.setFullYear(now.getFullYear()+1);}
-    else if(dOnly){date=new Date(now.getFullYear(),now.getMonth(),parseInt(dOnly[1]));if(date<new Date(now.getFullYear(),now.getMonth(),now.getDate()))date.setMonth(now.getMonth()+1);}}
-  var hour=null,minute=0,isAft=/오후|저녁|밤/.test(text),isMor=/오전|아침|새벽/.test(text),isNoon=/점심/.test(text);
+    else if(dO){date=new Date(now.getFullYear(),now.getMonth(),parseInt(dO[1]));if(date<new Date(now.getFullYear(),now.getMonth(),now.getDate()))date.setMonth(now.getMonth()+1);}
+  }
+  var hour=null,min=0,isA=/오후|저녁|밤/.test(text),isM=/오전|아침|새벽/.test(text),isN=/점심/.test(text);
   var hm=text.match(/(\d{1,2})\s*시\s*(\d{1,2})?\s*분?/);
-  if(hm){hour=parseInt(hm[1]);if(hm[2])minute=parseInt(hm[2]);if(/(\d{1,2})\s*시\s*반/.test(text))minute=30;
-    if(isAft&&hour<12)hour+=12;else if(isNoon&&hour<12)hour+=12;else if(isMor&&hour===12)hour=0;else if(!isMor&&!isAft&&!isNoon&&hour>=1&&hour<=7)hour+=12;}
-  else if(isNoon)hour=12;else if(/저녁/.test(text))hour=19;else if(/아침/.test(text))hour=8;
-  var time=hour!==null?String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0'):null;
+  if(hm){hour=parseInt(hm[1]);if(hm[2])min=parseInt(hm[2]);if(/(\d{1,2})\s*시\s*반/.test(text))min=30;
+    if(isA&&hour<12)hour+=12;else if(isN&&hour<12)hour+=12;else if(isM&&hour===12)hour=0;else if(!isM&&!isA&&!isN&&hour>=1&&hour<=7)hour+=12;}
+  else if(isN)hour=12;else if(/저녁/.test(text))hour=19;else if(/아침/.test(text))hour=8;
+  var time=hour!==null?String(hour).padStart(2,'0')+':'+String(min).padStart(2,'0'):null;
   var title=text.replace(/오늘|내일|낼|모레|글피/g,'').replace(/(다음주|담주|이번주|이번\s?주|다음\s?주)?\s*[일월화수목금토]요일/g,'').replace(/\d{1,2}\s*월\s*\d{1,2}\s*일/g,'').replace(/\d{1,2}\s*일/g,'').replace(/\d{1,2}\s*시\s*\d{1,2}\s*분?/g,'').replace(/\d{1,2}\s*시\s*반?/g,'').replace(/오전|오후|저녁|아침|점심|새벽|밤|에서|에|쯤/g,'').trim();
   if(!title)title='일정';
   return{title:title.slice(0,40),date:date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0'),time:time};
 }
-function updatePreview(val){var pb=document.getElementById('previewBar'),pt=document.getElementById('previewText');if(!val||!val.trim()){pb.className='preview-bar';return;}var p=parseInput(val);pt.textContent=fmtDate(p.date)+'('+dow(p.date)+') '+fmtTime(p.time)+' · '+p.title;pb.className='preview-bar show';}
+function updatePreview(val){
+  var pb=document.getElementById('previewBar'),pt=document.getElementById('previewText');
+  if(!val||!val.trim()){if(pb)pb.className='preview-bar';return;}
+  var p=parseInput(val);
+  if(pt)pt.textContent=fmtDate(p.date)+'('+dow(p.date)+') '+fmtTime(p.time)+' · '+p.title;
+  if(pb)pb.className='preview-bar show';
+}
 var MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 var RL={'1d':'1일 전','1h':'1시간 전','10m':'10분 전'};
 function render(){
   var y=state.year,mo=state.month,dim=new Date(y,mo+1,0).getDate(),fd=new Date(y,mo,1).getDay(),today=todayStr();
   var byDay={};
-  state.events.forEach(function(ev){var prefix=y+'-'+String(mo+1).padStart(2,'0');if(ev.date.startsWith(prefix)){var d=parseInt(ev.date.split('-')[2]);if(!byDay[d])byDay[d]=[];byDay[d].push(ev);}});
-  var calCells='';
-  for(var i=0;i<fd;i++)calCells+='<div></div>';
-  for(var d=1;d<=dim;d++){var isToday=(y===NOW.getFullYear()&&mo===NOW.getMonth()&&d===NOW.getDate()),isSel=d===state.selDay,isSun=(fd+d-1)%7===0;
-    calCells+='<button class="cal-day'+(isToday?' today':'')+(isSel?' selected':'')+(isSun&&!isSel?' sunday':'')+'" onclick="selectDay('+d+')">'+d+(byDay[d]?'<span class="dot"></span>':'')+'</button>';}
-  var selHTML='';
-  if(state.selDay){var selDate=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(state.selDay).padStart(2,'0');var selEvs=state.events.filter(function(e){return e.date===selDate;});
-    selHTML='<div class="card"><div class="card-header"><h3>'+(mo+1)+'월 '+state.selDay+'일 일정</h3><button onclick="selectDay(null)">✕</button></div>'+(selEvs.length===0?'<p class="empty-msg">이날 일정이 없습니다</p>':selEvs.map(function(ev){return'<div class="event-item"><div class="event-info"><div class="event-title">'+ev.title+'</div><div class="event-time">🕐 '+fmtTime(ev.time)+'</div></div><button class="del-btn" onclick="deleteEvent('+ev.id+')">🗑️</button></div>';}).join(''))+'</div>';}
-  var upcoming=state.events.filter(function(e){return new Date(e.date+'T'+(e.time||'00:00'))>=new Date(NOW.getFullYear(),NOW.getMonth(),NOW.getDate());}).sort(function(a,b){return new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00'));});
-  var upHTML=upcoming.length===0?'<p class="empty-msg">아래에서 일정을 추가해보세요!</p>':upcoming.map(function(ev){var remBtns=['1d','1h','10m'].map(function(r){return'<button class="rem-btn '+((ev.rem||[]).includes(r)?'active':'')+'" onclick="toggleRem('+ev.id+',\''+r+'\')">🔔 '+RL[r]+'</button>';}).join('');return'<div class="event-item'+(ev.date===today?' today-ev':'')+'"><div class="event-info"><div class="event-title">'+ev.title+'</div><div class="event-time">🕐 '+fmtDate(ev.date)+'('+dow(ev.date)+') · '+fmtTime(ev.time)+'</div><div class="rem-buttons">'+remBtns+'</div></div><button class="del-btn" onclick="deleteEvent('+ev.id+')">🗑️</button></div>';}).join('');
-  document.getElementById('main').innerHTML='<div class="card"><div class="cal-nav"><button onclick="changeMonth(-1)">‹</button><h2>'+y+'년 '+MN[mo]+'</h2><button onclick="changeMonth(1)">›</button></div><div class="dow-row"><div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div></div><div class="cal-grid">'+calCells+'</div></div>'+selHTML+'<div class="card"><h3>다가오는 일정 ('+upcoming.length+')</h3><div>'+upHTML+'</div></div>';
-  var nb=document.getElementById('notifBtn');if(nb){nb.className='notif-btn'+(state.notifPerm==='granted'?' on':'');nb.textContent='🔔 '+(state.notifPerm==='granted'?'알림 ON':'알림 켜기');}
-  var mb=document.getElementById('micBtn');if(mb)mb.className='mic-btn'+(state.listening?' active':'');
+  state.events.forEach(function(ev){
+    var prefix=y+'-'+String(mo+1).padStart(2,'0');
+    if(ev.date.startsWith(prefix)){var d=parseInt(ev.date.split('-')[2]);if(!byDay[d])byDay[d]=[];byDay[d].push(ev);}
+  });
+  var cells='';
+  for(var i=0;i<fd;i++)cells+='<div></div>';
+  for(var d=1;d<=dim;d++){
+    var iT=(y===NOW.getFullYear()&&mo===NOW.getMonth()&&d===NOW.getDate()),iS=d===state.selDay,iSu=(fd+d-1)%7===0;
+    cells+='<button class="cal-day'+(iT?' today':'')+(iS?' selected':'')+(iSu&&!iS?' sunday':'')+'" onclick="selDay('+d+')">'+d+(byDay[d]?'<span class="dot"></span>':'')+'</button>';
+  }
+  var selH='';
+  if(state.selDay){
+    var sd=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(state.selDay).padStart(2,'0');
+    var se=state.events.filter(function(e){return e.date===sd;});
+    selH='<div class="card"><div class="card-header"><h3>'+(mo+1)+'월 '+state.selDay+'일 일정</h3><button onclick="selDay(null)">✕</button></div>';
+    selH+=se.length===0?'<p class="empty-msg">이날 일정이 없습니다</p>':se.map(function(ev){return'<div class="event-item"><div class="event-info"><div class="event-title">'+ev.title+'</div><div class="event-time">🕐 '+fmtTime(ev.time)+'</div></div><button class="del-btn" onclick="delEv('+ev.id+')">🗑️</button></div>';}).join('');
+    selH+='</div>';
+  }
+  var up=state.events.filter(function(e){return new Date(e.date+'T'+(e.time||'00:00'))>=new Date(NOW.getFullYear(),NOW.getMonth(),NOW.getDate());}).sort(function(a,b){return new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00'));});
+  var upH=up.length===0?'<p class="empty-msg">아래에서 일정을 추가해보세요!</p>':up.map(function(ev){
+    var rb=['1d','1h','10m'].map(function(r){return'<button class="rem-btn '+((ev.rem||[]).includes(r)?'active':'')+'" onclick="togRem('+ev.id+',\''+r+'\')">🔔 '+RL[r]+'</button>';}).join('');
+    return'<div class="event-item'+(ev.date===today?' today-ev':'')+'"><div class="event-info"><div class="event-title">'+ev.title+'</div><div class="event-time">🕐 '+fmtDate(ev.date)+'('+dow(ev.date)+') · '+fmtTime(ev.time)+'</div><div class="rem-buttons">'+rb+'</div></div><button class="del-btn" onclick="delEv('+ev.id+')">🗑️</button></div>';
+  }).join('');
+  document.getElementById('main').innerHTML=
+    '<div class="card"><div class="cal-nav"><button onclick="chMo(-1)">&#8249;</button><h2>'+y+'년 '+MN[mo]+'</h2><button onclick="chMo(1)">&#8250;</button></div>'+
+    '<div class="dow-row"><div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div></div>'+
+    '<div class="cal-grid">'+cells+'</div></div>'+selH+
+    '<div class="card"><h3>다가오는 일정 ('+up.length+')</h3><div>'+upH+'</div></div>';
+  var nb=document.getElementById('notifBtn');
+  if(nb){nb.className='notif-btn'+(state.notifPerm==='granted'?' on':'');nb.textContent='🔔 '+(state.notifPerm==='granted'?'알림 ON':'알림 켜기');}
+  var mb=document.getElementById('micBtn');
+  if(mb)mb.className='mic-btn'+(state.listening?' active':'');
 }
-function changeMonth(dir){state.month+=dir;if(state.month<0){state.month=11;state.year--;}if(state.month>11){state.month=0;state.year++;}state.selDay=null;render();}
-function selectDay(d){state.selDay=(state.selDay===d)?null:d;render();}
-function doAdd(){var el=document.getElementById('inputText');var text=el?el.value.trim():'';if(!text){showToast('일정을 입력해주세요');return;}var parsed=parseInput(text);state.events.push({id:Date.now(),title:parsed.title,date:parsed.date,time:parsed.time,rem:['1d','1h','10m']});save();render();if(el){el.value='';el.style.height='48px';}var pb=document.getElementById('previewBar');if(pb)pb.className='preview-bar';showToast('✅ 등록: '+parsed.title+' ('+parsed.date.slice(5)+' '+(parsed.time||'시간미정')+')');}
-function deleteEvent(id){state.events=state.events.filter(function(e){return e.id!=id;});save();render();}
-function toggleRem(id,r){state.events=state.events.map(function(e){if(e.id!=id)return e;var rem=e.rem||[];return Object.assign({},e,{rem:rem.includes(r)?rem.filter(function(x){return x!==r;}):[].concat(rem,[r])});});save();render();}
-function askNotif(){if(!('Notification' in window)){showToast('알림 미지원');return;}Notification.requestPermission().then(function(p){state.notifPerm=p;showToast(p==='granted'?'알림 켜짐 🔔':'알림 거부됨');render();});}
+function chMo(d){state.month+=d;if(state.month<0){state.month=11;state.year--;}if(state.month>11){state.month=0;state.year++;}state.selDay=null;render();}
+function selDay(d){state.selDay=(state.selDay===d)?null:d;render();}
+function doAdd(){
+  var el=document.getElementById('inputText'),text=el?el.value.trim():'';
+  if(!text){showToast('일정을 입력해주세요');return;}
+  var p=parseInput(text);
+  state.events.push({id:Date.now(),title:p.title,date:p.date,time:p.time,rem:['1d','1h','10m']});
+  save();render();
+  if(el){el.value='';el.style.height='48px';}
+  var pb=document.getElementById('previewBar');if(pb)pb.className='preview-bar';
+  showToast('✅ 등록: '+p.title+' ('+p.date.slice(5)+' '+(p.time||'시간미정')+')');
+}
+function delEv(id){state.events=state.events.filter(function(e){return e.id!=id;});save();render();}
+function togRem(id,r){
+  state.events=state.events.map(function(e){
+    if(e.id!=id)return e;
+    var rem=e.rem||[];
+    return Object.assign({},e,{rem:rem.includes(r)?rem.filter(function(x){return x!==r;}):[].concat(rem,[r])});
+  });
+  save();render();
+}
+function askNotif(){
+  if(!('Notification' in window)){showToast('알림 미지원');return;}
+  Notification.requestPermission().then(function(p){state.notifPerm=p;showToast(p==='granted'?'알림 켜짐 🔔':'알림 거부됨');render();});
+}
 function autoResize(el){el.style.height='48px';el.style.height=Math.min(el.scrollHeight,120)+'px';}
 var recObj=null;
 (function(){
@@ -155,9 +202,9 @@ var recObj=null;
     var interim='',final='';
     for(var i=e.resultIndex;i<e.results.length;i++){var t=e.results[i][0].transcript;if(e.results[i].isFinal)final+=t;else interim+=t;}
     var el=document.getElementById('inputText'),il=document.getElementById('interimLabel');
-    if(el){el.value=final||interim;if(final)el.className='';else el.className='listening';autoResize(el);updatePreview(el.value);}
+    if(el){el.value=final||interim;el.className=final?'':'listening';autoResize(el);updatePreview(el.value);}
     if(il)il.className=final?'interim-label':'interim-label show';
-    if(final){state.listening=false;var mb=document.getElementById('micBtn');if(mb)mb.className='mic-btn';showToast('✏️ 확인·수정 후 ＋ 버튼으로 등록하세요');}
+    if(final){state.listening=false;var mb=document.getElementById('micBtn');if(mb)mb.className='mic-btn';showToast('✏️ 확인·수정 후 ＋ 버튼으로 등록');}
   };
   recObj.onerror=function(e){
     state.listening=false;
@@ -178,121 +225,22 @@ function toggleVoice(){
   try{recObj.start();state.listening=true;var mb=document.getElementById('micBtn');if(mb)mb.className='mic-btn active';showToast('🎤 말씀하세요...');}
   catch(e){state.listening=false;showToast('잠시 후 다시 시도하세요');}
 }
-var firedAlerts={};
-setInterval(function(){var now=Date.now(),REM={'1d':86400000,'1h':3600000,'10m':600000},LBL={'1d':'하루','1h':'1시간','10m':'10분'};state.events.forEach(function(ev){if(!ev.time)return;var target=new Date(ev.date+'T'+ev.time+':00').getTime();(ev.rem||[]).forEach(function(r){var at=target-REM[r],key=ev.id+'-'+r;if(now>=at&&now<at+60000&&!firedAlerts[key]){firedAlerts[key]=true;showToast('⏰ '+LBL[r]+' 후: '+ev.title);if(state.notifPerm==='granted'&&'Notification' in window)new Notification('⏰ '+LBL[r]+' 후: '+ev.title,{body:ev.date+' '+ev.time,tag:key});}});});},30000);
-render();
-</script>
-</body>
-</html>.event-item.today-ev{background:#eff6ff;border-color:#bfdbfe}
-.event-info{flex:1;min-width:0}
-.event-title{font-size:14px;font-weight:600;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.event-time{font-size:11px;color:#64748b;margin-top:3px}
-.rem-buttons{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
-.rem-btn{font-size:10px;padding:2px 8px;border-radius:999px;background:#e2e8f0;color:#64748b}
-.rem-btn.active{background:#2563eb;color:#fff}
-.del-btn{font-size:18px;padding:4px;border-radius:8px;flex-shrink:0;color:#f87171}
-.empty-msg{font-size:13px;color:#94a3b8}
-.input-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e2e8f0;padding:10px 12px;z-index:100}
-.input-inner{display:flex;align-items:flex-end;gap:8px;max-width:480px;margin:0 auto}
-.input-inner textarea{flex:1;padding:12px 16px;background:#f1f5f9;border:none;border-radius:20px;resize:none;font-size:14px;outline:none;min-height:48px;max-height:96px;color:#1e293b}
-.mic-btn{width:48px;height:48px;border-radius:50%;background:#e2e8f0;font-size:20px;flex-shrink:0}
-.mic-btn.active{background:#ef4444;animation:pulse 1s infinite}
-.add-btn{width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;font-size:24px;flex-shrink:0}
-.hint{font-size:11px;color:#94a3b8;text-align:center;margin-top:6px;max-width:480px;margin-left:auto;margin-right:auto}
-.toast{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;font-size:13px;padding:10px 20px;border-radius:999px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200;max-width:90vw;text-align:center}
-.toast.show{opacity:1}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-</style>
-</head>
-<body>
-<div class="header">
-  <div class="header-inner">
-    <div class="logo">📅 일정 비서</div>
-    <button class="notif-btn" id="notifBtn" onclick="askNotif()">🔔 알림 켜기</button>
-  </div>
-</div>
-<main id="main"></main>
-<div class="input-bar">
-  <div class="input-inner">
-    <textarea id="inputText" placeholder="예: 내일 오후 3시 회의" rows="1" oninput="autoResize(this)"></textarea>
-    <button class="mic-btn" id="micBtn" onclick="toggleVoice()">🎤</button>
-    <button class="add-btn" onclick="doAdd()">＋</button>
-  </div>
-  <p class="hint">🎤 누르고 말하면 바로 등록 | 예: "다음주 월요일 9시 회의"</p>
-</div>
-<div class="toast" id="toast"></div>
-<script>
-var NOW=new Date();
-var state={events:[],year:NOW.getFullYear(),month:NOW.getMonth(),selDay:null,listening:false,notifPerm:('Notification' in window)?Notification.permission:'denied'};
-try{var s=localStorage.getItem('sched_v3');if(s)state.events=JSON.parse(s);}catch(e){}
-function save(){try{localStorage.setItem('sched_v3',JSON.stringify(state.events));}catch(e){}}
-var toastTimer;
-function showToast(msg){var el=document.getElementById('toast');el.textContent=msg;el.className='toast show';clearTimeout(toastTimer);toastTimer=setTimeout(function(){el.className='toast';},2600);}
-function fmtDate(s){var d=new Date(s);return(d.getMonth()+1)+'월 '+d.getDate()+'일';}
-function fmtTime(t){if(!t)return'시간 미정';var p=t.split(':'),h=parseInt(p[0]),m=parseInt(p[1]),ap=h>=12?'오후':'오전',dh=h>12?h-12:h===0?12:h;return ap+' '+dh+':'+String(m).padStart(2,'0');}
-function dow(s){return['일','월','화','수','목','금','토'][new Date(s).getDay()];}
-function todayStr(){return NOW.getFullYear()+'-'+String(NOW.getMonth()+1).padStart(2,'0')+'-'+String(NOW.getDate()).padStart(2,'0');}
-function parseInput(raw){
-  var text=raw.trim(),now=new Date();
-  var date=new Date(now.getFullYear(),now.getMonth(),now.getDate()),dateMatched=false;
-  var dayMap={'일':0,'월':1,'화':2,'수':3,'목':4,'금':5,'토':6};
-  if(/오늘/.test(text))dateMatched=true;
-  else if(/내일|낼/.test(text)){date.setDate(date.getDate()+1);dateMatched=true;}
-  else if(/모레/.test(text)){date.setDate(date.getDate()+2);dateMatched=true;}
-  else if(/글피/.test(text)){date.setDate(date.getDate()+3);dateMatched=true;}
-  var wd=text.match(/(다음주|담주|이번주|이번\s?주|다음\s?주)?\s*([일월화수목금토])요일/);
-  if(wd&&!dateMatched){var t=dayMap[wd[2]],isNext=/다음|담/.test(wd[1]||''),diff=(t-now.getDay()+7)%7;if(isNext)diff+=7;date=new Date(now.getFullYear(),now.getMonth(),now.getDate()+diff);dateMatched=true;}
-  if(!dateMatched){var md=text.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/),dOnly=text.match(/(\d{1,2})\s*일/);
-    if(md){date=new Date(now.getFullYear(),parseInt(md[1])-1,parseInt(md[2]));if(date<new Date(now.getFullYear(),now.getMonth(),now.getDate()))date.setFullYear(now.getFullYear()+1);}
-    else if(dOnly){date=new Date(now.getFullYear(),now.getMonth(),parseInt(dOnly[1]));if(date<new Date(now.getFullYear(),now.getMonth(),now.getDate()))date.setMonth(now.getMonth()+1);}
-  }
-  var hour=null,minute=0,isAft=/오후|저녁|밤/.test(text),isMor=/오전|아침|새벽/.test(text),isNoon=/점심/.test(text);
-  var hm=text.match(/(\d{1,2})\s*시\s*(\d{1,2})?\s*분?/);
-  if(hm){hour=parseInt(hm[1]);if(hm[2])minute=parseInt(hm[2]);if(/(\d{1,2})\s*시\s*반/.test(text))minute=30;
-    if(isAft&&hour<12)hour+=12;else if(isNoon&&hour<12)hour+=12;else if(isMor&&hour===12)hour=0;else if(!isMor&&!isAft&&!isNoon&&hour>=1&&hour<=7)hour+=12;}
-  else if(isNoon)hour=12;else if(/저녁/.test(text))hour=19;else if(/아침/.test(text))hour=8;
-  var time=hour!==null?String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0'):null;
-  var title=text.replace(/오늘|내일|낼|모레|글피/g,'').replace(/(다음주|담주|이번주|이번\s?주|다음\s?주)?\s*[일월화수목금토]요일/g,'').replace(/\d{1,2}\s*월\s*\d{1,2}\s*일/g,'').replace(/\d{1,2}\s*일/g,'').replace(/\d{1,2}\s*시\s*\d{1,2}\s*분?/g,'').replace(/\d{1,2}\s*시\s*반?/g,'').replace(/오전|오후|저녁|아침|점심|새벽|밤|에서|에|쯤/g,'').trim();
-  if(!title)title='일정';
-  return{title:title.slice(0,40),date:date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0'),time:time};
-}
-var MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-var RL={'1d':'1일 전','1h':'1시간 전','10m':'10분 전'};
-function render(){
-  var y=state.year,mo=state.month,dim=new Date(y,mo+1,0).getDate(),fd=new Date(y,mo,1).getDay(),today=todayStr();
-  var byDay={};
-  state.events.forEach(function(ev){var prefix=y+'-'+String(mo+1).padStart(2,'0');if(ev.date.startsWith(prefix)){var d=parseInt(ev.date.split('-')[2]);if(!byDay[d])byDay[d]=[];byDay[d].push(ev);}});
-  var calCells='';
-  for(var i=0;i<fd;i++)calCells+='<div></div>';
-  for(var d=1;d<=dim;d++){var isToday=(y===NOW.getFullYear()&&mo===NOW.getMonth()&&d===NOW.getDate()),isSel=d===state.selDay,isSun=(fd+d-1)%7===0;
-    calCells+='<button class="cal-day'+(isToday?' today':'')+(isSel?' selected':'')+(isSun&&!isSel?' sunday':'')+'" onclick="selectDay('+d+')">'+d+(byDay[d]?'<span class="dot"></span>':'')+'</button>';}
-  var selHTML='';
-  if(state.selDay){var selDate=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(state.selDay).padStart(2,'0');var selEvs=state.events.filter(function(e){return e.date===selDate;});
-    selHTML='<div class="card"><div class="card-header"><h3>'+(mo+1)+'월 '+state.selDay+'일 일정</h3><button onclick="selectDay(null)">✕</button></div>'+(selEvs.length===0?'<p class="empty-msg">이날 일정이 없습니다</p>':selEvs.map(function(ev){return'<div class="event-item"><div class="event-info"><div class="event-title">'+ev.title+'</div><div class="event-time">🕐 '+fmtTime(ev.time)+'</div></div><button class="del-btn" onclick="deleteEvent('+ev.id+')">🗑️</button></div>';}).join(''))+'</div>';}
-  var upcoming=state.events.filter(function(e){return new Date(e.date+'T'+(e.time||'00:00'))>=new Date(NOW.getFullYear(),NOW.getMonth(),NOW.getDate());}).sort(function(a,b){return new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00'));});
-  var upHTML=upcoming.length===0?'<p class="empty-msg">아래에서 일정을 추가해보세요!</p>':upcoming.map(function(ev){
-    var remBtns=['1d','1h','10m'].map(function(r){return'<button class="rem-btn '+((ev.rem||[]).includes(r)?'active':'')+'" onclick="toggleRem('+ev.id+',\''+r+'\')">🔔 '+RL[r]+'</button>';}).join('');
-    return'<div class="event-item'+(ev.date===today?' today-ev':'')+'"><div class="event-info"><div class="event-title">'+ev.title+'</div><div class="event-time">🕐 '+fmtDate(ev.date)+'('+dow(ev.date)+') · '+fmtTime(ev.time)+'</div><div class="rem-buttons">'+remBtns+'</div></div><button class="del-btn" onclick="deleteEvent('+ev.id+')">🗑️</button></div>';
-  }).join('');
-  document.getElementById('main').innerHTML='<div class="card"><div class="cal-nav"><button onclick="changeMonth(-1)">‹</button><h2>'+y+'년 '+MN[mo]+'</h2><button onclick="changeMonth(1)">›</button></div><div class="dow-row"><div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div></div><div class="cal-grid">'+calCells+'</div></div>'+selHTML+'<div class="card"><h3>다가오는 일정 ('+upcoming.length+')</h3><div>'+upHTML+'</div></div>';
-  var nb=document.getElementById('notifBtn');if(nb){nb.className='notif-btn'+(state.notifPerm==='granted'?' on':'');nb.textContent='🔔 '+(state.notifPerm==='granted'?'알림 ON':'알림 켜기');}
-  var mb=document.getElementById('micBtn');if(mb)mb.className='mic-btn'+(state.listening?' active':'');
-}
-function changeMonth(dir){state.month+=dir;if(state.month<0){state.month=11;state.year--;}if(state.month>11){state.month=0;state.year++;}state.selDay=null;render();}
-function selectDay(d){state.selDay=(state.selDay===d)?null:d;render();}
-function doAdd(){var el=document.getElementById('inputText');var text=el?el.value.trim():'';if(!text){showToast('일정을 입력해주세요');return;}var parsed=parseInput(text);state.events.push({id:Date.now(),title:parsed.title,date:parsed.date,time:parsed.time,rem:['1d','1h','10m']});save();render();if(el){el.value='';el.style.height='48px';}showToast('✅ 등록: '+parsed.title+' ('+parsed.date.slice(5)+' '+(parsed.time||'시간미정')+')');}
-function deleteEvent(id){state.events=state.events.filter(function(e){return e.id!=id;});save();render();}
-function toggleRem(id,r){state.events=state.events.map(function(e){if(e.id!=id)return e;var rem=e.rem||[];return Object.assign({},e,{rem:rem.includes(r)?rem.filter(function(x){return x!==r;}):[].concat(rem,[r])});});save();render();}
-function askNotif(){if(!('Notification' in window)){showToast('알림 미지원');return;}Notification.requestPermission().then(function(p){state.notifPerm=p;showToast(p==='granted'?'알림 켜짐 🔔':'알림 거부됨');render();});}
-function autoResize(el){el.style.height='48px';el.style.height=Math.min(el.scrollHeight,96)+'px';}
-var recObj=null;
-(function(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;recObj=new SR();recObj.lang='ko-KR';recObj.interimResults=false;recObj.maxAlternatives=1;
-recObj.onresult=function(e){var text=e.results[0][0].transcript;state.listening=false;var parsed=parseInput(text);state.events.push({id:Date.now(),title:parsed.title,date:parsed.date,time:parsed.time,rem:['1d','1h','10m']});save();render();showToast('🎤 등록: '+parsed.title+' ('+parsed.date.slice(5)+' '+(parsed.time||'시간미정')+')');}; 
-recObj.onerror=function(e){state.listening=false;showToast(e.error==='not-allowed'?'마이크 권한 허용 필요':'음성 인식 실패');render();};
-recObj.onend=function(){state.listening=false;render();};})();
-function toggleVoice(){if(!recObj){showToast('키보드의 🎤 버튼을 사용하세요');return;}if(state.listening){recObj.stop();state.listening=false;render();return;}try{recObj.start();state.listening=true;render();showToast('듣고 있습니다 🎤');}catch(e){state.listening=false;render();}}
-var firedAlerts={};
-setInterval(function(){var now=Date.now();var REM={'1d':86400000,'1h':3600000,'10m':600000};var LBL={'1d':'하루','1h':'1시간','10m':'10분'};state.events.forEach(function(ev){if(!ev.time)return;var target=new Date(ev.date+'T'+ev.time+':00').getTime();(ev.rem||[]).forEach(function(r){var at=target-REM[r],key=ev.id+'-'+r;if(now>=at&&now<at+60000&&!firedAlerts[key]){firedAlerts[key]=true;showToast('⏰ '+LBL[r]+' 후: '+ev.title);if(state.notifPerm==='granted'&&'Notification' in window)new Notification('⏰ '+LBL[r]+' 후: '+ev.title,{body:ev.date+' '+ev.time,tag:key});}});});},30000);
+var fired={};
+setInterval(function(){
+  var now=Date.now(),REM={'1d':86400000,'1h':3600000,'10m':600000},LBL={'1d':'하루','1h':'1시간','10m':'10분'};
+  state.events.forEach(function(ev){
+    if(!ev.time)return;
+    var tgt=new Date(ev.date+'T'+ev.time+':00').getTime();
+    (ev.rem||[]).forEach(function(r){
+      var at=tgt-REM[r],key=ev.id+'-'+r;
+      if(now>=at&&now<at+60000&&!fired[key]){
+        fired[key]=true;
+        showToast('⏰ '+LBL[r]+' 후: '+ev.title);
+        if(state.notifPerm==='granted'&&'Notification' in window)new Notification('⏰ '+LBL[r]+' 후: '+ev.title,{body:ev.date+' '+ev.time,tag:key});
+      }
+    });
+  });
+},30000);
 render();
 </script>
 </body>
